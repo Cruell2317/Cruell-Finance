@@ -13,10 +13,11 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   const isOnboardingRoute = pathname.startsWith("/onboarding");
+  const isAuthed = Boolean(user || profile);
 
   useEffect(() => {
     if (authLoading || onboardingLoading) return;
-    if (!profile && !user) {
+    if (!isAuthed) {
       router.replace("/login");
       return;
     }
@@ -24,7 +25,7 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     const targetPath = getOnboardingPath(step);
 
     if (step !== "complete") {
-      if (!isOnboardingRoute || pathname !== targetPath) {
+      if (pathname !== targetPath) {
         router.replace(targetPath);
       }
       return;
@@ -35,15 +36,17 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     }
   }, [
     profile,
+    user,
     step,
     authLoading,
     onboardingLoading,
+    isAuthed,
     isOnboardingRoute,
     router,
     pathname,
   ]);
 
-  if (authLoading || onboardingLoading) {
+  if (authLoading || onboardingLoading || (isAuthed && !profile)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E5E5EA] border-t-[#1C1C1E]" />
@@ -51,15 +54,13 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!profile && !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E5E5EA] border-t-[#1C1C1E]" />
-      </div>
-    );
+  if (!isAuthed) {
+    return null;
   }
 
-  if (step !== "complete" && !isOnboardingRoute) return null;
+  if (step !== "complete" && pathname !== getOnboardingPath(step)) {
+    return null;
+  }
 
   return <>{children}</>;
 }

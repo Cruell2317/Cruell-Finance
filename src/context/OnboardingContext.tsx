@@ -37,7 +37,7 @@ interface OnboardingContextValue {
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  const { profile, refreshProfile } = useAuth();
+  const { profile, user, refreshProfile } = useAuth();
   const [coupleSpace, setCoupleSpace] = useState<CoupleSpace | null>(null);
   const [members, setMembers] = useState<CoupleMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,7 +71,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const isPaired = members.length >= 2;
 
   const step: OnboardingStep = useMemo(() => {
-    if (!profile) return "login";
+    if (!profile) {
+      return user ? "pairing" : "login";
+    }
     if (!profile.coupleSpaceId || !isPaired) return "pairing";
     if (!profile.profileSetupDone) return "profile";
     if (
@@ -82,7 +84,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       return "start-date";
     if (!coupleSpace.onboardingComplete) return "target";
     return "complete";
-  }, [profile, isPaired, coupleSpace]);
+  }, [profile, user, isPaired, coupleSpace]);
 
   const createCoupleSpace = useCallback(async () => {
     const supabase = createClient();

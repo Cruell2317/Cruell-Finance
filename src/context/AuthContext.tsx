@@ -93,9 +93,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hydrateFromUser = useCallback(async (authUser: User) => {
     setUser(authUser);
+    setProfile(fallbackProfile(authUser));
     await ensureUserRow(authUser);
     const dbProfile = await loadProfileFromDb(authUser.id);
-    setProfile(dbProfile ?? fallbackProfile(authUser));
+    if (dbProfile) setProfile(dbProfile);
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -119,13 +120,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const supabase = createClient();
 
-    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-      if (authUser) {
-        hydrateFromUser(authUser).finally(() => setIsLoading(false));
-      } else {
-        setIsLoading(false);
-      }
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        if (session?.user) {
+          return hydrateFromUser(session.user);
+        }
+        return supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+          if (authUser) return hydrateFromUser(authUser);
+        });
+      })
+      .finally(() => setIsLoading(false));
 
     const {
       data: { subscription },
