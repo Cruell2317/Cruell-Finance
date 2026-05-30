@@ -64,8 +64,18 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, [profile]);
 
   useEffect(() => {
+    let cancelled = false;
     setIsLoading(true);
-    loadState();
+    loadState().finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+    const timeout = window.setTimeout(() => {
+      if (!cancelled) setIsLoading(false);
+    }, 3000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, [loadState]);
 
   const isPaired = members.length >= 2;

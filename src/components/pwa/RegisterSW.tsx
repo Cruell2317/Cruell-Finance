@@ -2,13 +2,13 @@
 
 import { useEffect } from "react";
 
+/** SW lama merusak OAuth — hapus semua registrasi, jangan daftar ulang dulu. */
 export function RegisterSW() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-
-    navigator.serviceWorker
-      .register("/sw.js", { scope: "/" })
-      .catch((err) => console.warn("SW registration failed:", err));
+    void navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((reg) => void reg.unregister());
+    });
   }, []);
 
   return null;

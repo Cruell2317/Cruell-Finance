@@ -7,7 +7,7 @@ export function createClient() {
   return createBrowserClient(url, key, {
     auth: {
       flowType: "pkce",
-      detectSessionInUrl: true,
+      detectSessionInUrl: false,
       persistSession: true,
       autoRefreshToken: true,
     },

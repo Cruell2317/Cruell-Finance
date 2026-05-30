@@ -10,7 +10,17 @@ const PUBLIC_PATHS = [
 ];
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, searchParams } = request.nextUrl;
+
+  // Supabase kadang mengembalikan PKCE code ke Site URL (/) bukan /auth/callback
+  if (
+    searchParams.has("code") &&
+    !pathname.startsWith("/auth/callback")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
 
   if (
     pathname.startsWith("/_next") ||
@@ -19,6 +29,11 @@ export async function middleware(request: NextRequest) {
     pathname === "/sw.js" ||
     pathname.match(/\.(svg|png|jpg|ico|webp)$/)
   ) {
+    return NextResponse.next();
+  }
+
+  // OAuth callback: biarkan route handler tukar code → cookie
+  if (pathname.startsWith("/auth/callback") && searchParams.has("code")) {
     return NextResponse.next();
   }
 
@@ -58,9 +73,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (user && (pathname === "/splash" || pathname === "/login")) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
+  // Jangan paksa /login → /. Client yang redirect setelah session terbaca.
+  // Paksa / → /login di sini bikin loop jika cookie server ada tapi JS tidak baca session.
 
   return response;
 }

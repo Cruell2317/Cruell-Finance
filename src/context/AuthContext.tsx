@@ -44,45 +44,56 @@ function fallbackProfile(user: User): Profile {
 }
 
 async function ensureUserRow(user: User) {
-  const supabase = createClient();
-  await supabase.from("users").upsert(
-    {
-      id: user.id,
-      email: user.email,
-      display_name:
-        (user.user_metadata?.full_name as string) ??
-        (user.user_metadata?.name as string) ??
-        user.email?.split("@")[0] ??
-        "User",
-      avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
-    },
-    { onConflict: "id", ignoreDuplicates: true }
-  );
+  try {
+    const supabase = createClient();
+    await supabase.from("users").upsert(
+      {
+        id: user.id,
+        email: user.email,
+        display_name:
+          (user.user_metadata?.full_name as string) ??
+          user.email?.split("@")[0] ??
+          "User",
+        avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
+      },
+      { onConflict: "id", ignoreDuplicates: true }
+    );
+  } catch {
+    /* RLS/network — fallback profile tetap dipakai */
+  }
 }
 
 async function loadProfileFromDb(userId: string): Promise<Profile | null> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("users")
-    .select(
-      "id, email, display_name, avatar_url, couple_space_id, profile_setup_done, is_space_creator, saving_streak"
-    )
-    .eq("id", userId)
-    .maybeSingle();
+  try {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("users")
+      .select(
+        "id, email, display_name, avatar_url, couple_space_id, profile_setup_done, is_space_creator, saving_streak"
+      )
+      .eq("id", userId)
+      .maybeSingle();
 
-  if (error || !data) return null;
+    if (error || !data) return null;
 
-  return {
-    id: data.id,
-    email: data.email ?? "",
-    displayName: data.display_name ?? "",
-    avatarUrl: data.avatar_url,
-    fullName: data.display_name,
-    coupleSpaceId: data.couple_space_id,
-    profileSetupDone: data.profile_setup_done,
-    isSpaceCreator: data.is_space_creator,
-    savingStreak: data.saving_streak ?? 0,
-  };
+    return {
+      id: data.id,
+      email: data.email ?? "",
+      displayName: data.display_name ?? "",
+      avatarUrl: data.avatar_url,
+      fullName: data.display_name,
+      coupleSpaceId: data.couple_space_id,
+      profileSetupDone: data.profile_setup_done,
+      isSpaceCreator: data.is_space_creator,
+      savingStreak: data.saving_streak ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function applyUser(authUser: User) {
+  return { user: authUser, profile: fallbackProfile(authUser) };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -91,9 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const configReady = publicEnvOk();
 
-  const hydrateFromUser = useCallback(async (authUser: User) => {
-    setUser(authUser);
-    setProfile(fallbackProfile(authUser));
+  const syncDbProfile = useCallback(async (authUser: User) => {
     await ensureUserRow(authUser);
     const dbProfile = await loadProfileFromDb(authUser.id);
     if (dbProfile) setProfile(dbProfile);
@@ -109,8 +118,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       return;
     }
-    await hydrateFromUser(authUser);
-  }, [hydrateFromUser]);
+    const next = applyUser(authUser);
+    setUser(next.user);
+    setProfile(next.profile);
+    await syncDbProfile(authUser);
+  }, [syncDbProfile]);
 
   useEffect(() => {
     if (!configReady) {
@@ -119,32 +131,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const supabase = createClient();
+    let done = false;
 
-    supabase.auth
-      .getSession()
-      .then(({ data: { session } }) => {
-        if (session?.user) {
-          return hydrateFromUser(session.user);
-        }
-        return supabase.auth.getUser().then(({ data: { user: authUser } }) => {
-          if (authUser) return hydrateFromUser(authUser);
-        });
-      })
-      .finally(() => setIsLoading(false));
+    const finish = () => {
+      if (!done) {
+        done = true;
+        setIsLoading(false);
+      }
+    };
+
+    const timeout = window.setTimeout(finish, 2500);
+
+    const applySession = (authUser: User) => {
+      const next = applyUser(authUser);
+      setUser(next.user);
+      setProfile(next.profile);
+      finish();
+      void syncDbProfile(authUser);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        applySession(session.user);
+        return;
+      }
+      supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+        if (authUser) applySession(authUser);
+        else finish();
+      });
+    });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        await hydrateFromUser(session.user);
-      } else if (event === "SIGNED_OUT") {
+        const next = applyUser(session.user);
+        setUser(next.user);
+        setProfile(next.profile);
+        void syncDbProfile(session.user);
+      } else if (_event === "SIGNED_OUT") {
         setUser(null);
         setProfile(null);
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, [configReady, hydrateFromUser]);
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
+  }, [configReady, syncDbProfile]);
 
   const signInWithGoogle = useCallback(async () => {
     const supabase = createClient();
