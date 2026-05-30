@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { AuthCodeRedirect } from "@/components/auth/AuthCodeRedirect";
+import { CoupleRealtimeListener } from "@/components/auth/CoupleRealtimeListener";
 import { ConfigGuard } from "@/components/ConfigGuard";
 import { RegisterSW } from "@/components/pwa/RegisterSW";
 import { AuthProvider } from "@/context/AuthContext";
@@ -16,13 +17,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Cruell Finance",
+  title: "Cruell Financial",
   description: "Tabungan bersama pasangan",
-  applicationName: "Cruell Finance",
+  applicationName: "Cruell Financial",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Cruell Finance",
+    title: "Cruell Financial",
   },
   manifest: "/manifest.json",
 };
@@ -46,6 +47,7 @@ export default function RootLayout({
           <AuthCodeRedirect />
           <ConfigGuard>
             <OnboardingProvider>
+              <CoupleRealtimeListener />
               <AppProvider>
                 {children}
                 <NudgeListener />

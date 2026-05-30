@@ -2,7 +2,8 @@
 
 import { motion } from "framer-motion";
 import { Copy, Heart, Link2, Users } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { subscribeCoupleChannel } from "@/lib/realtime/couple-channels";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { OnboardingShell } from "@/components/onboarding/OnboardingShell";
@@ -20,6 +21,7 @@ export default function PairingPage() {
     isPaired,
     createCoupleSpace,
     joinCoupleSpace,
+    refresh,
   } = useOnboarding();
 
   const [mode, setMode] = useState<Mode>(coupleSpace ? "create" : "choose");
@@ -28,6 +30,17 @@ export default function PairingPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!coupleSpace?.id || isPaired) return;
+    return subscribeCoupleChannel(coupleSpace.id, (event) => {
+      if (event.type === "paired") {
+        void refresh().then(() => {
+          router.replace(getOnboardingPath("profile"));
+        });
+      }
+    });
+  }, [coupleSpace?.id, isPaired, refresh, router]);
 
   const handleCreate = async () => {
     setLoading(true);

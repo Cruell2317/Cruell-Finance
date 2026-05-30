@@ -87,7 +87,7 @@ export async function fetchCoupleSpaceData(coupleSpaceId: string) {
     supabase.from("couple_spaces").select("*").eq("id", coupleSpaceId).single(),
     supabase
       .from("users")
-      .select("id, display_name, avatar_url, is_space_creator, saving_streak")
+      .select("id, display_name, avatar_url, is_space_creator, role, saving_streak")
       .eq("couple_space_id", coupleSpaceId),
     supabase
       .from("savings_periods")
@@ -121,6 +121,12 @@ export async function fetchCoupleSpaceData(coupleSpaceId: string) {
         displayName: m.display_name ?? "User",
         avatarUrl: m.avatar_url,
         isCreator: m.is_space_creator,
+        role:
+          m.role === "CREATOR" || m.role === "JOINER"
+            ? m.role
+            : m.is_space_creator
+              ? "CREATOR"
+              : "JOINER",
         savingStreak: m.saving_streak ?? 0,
       } satisfies CoupleMember,
     ])

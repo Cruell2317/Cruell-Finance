@@ -106,9 +106,15 @@ export function PeriodDetailSheet({
           )}
 
           {!isOwn && (
-            <p className="mt-4 text-center text-[14px] text-[#8E8E93]">
-              Detail transaksi partner disembunyikan untuk privasi.
-            </p>
+            <div className="mt-6 rounded-2xl border border-[#E5E5EA] bg-[#F7F7F9] p-6 text-center">
+              <p className="text-[13px] text-[#8E8E93]">Status tagihan partner</p>
+              <p className="mt-3 text-[28px] font-bold text-[#1C1C1E]">
+                {period.status === "PAID" ? "Lunas" : "Belum Bayar"}
+              </p>
+              <p className="mt-2 text-[13px] text-[#8E8E93]">
+                Detail pembayaran & bukti transfer disembunyikan.
+              </p>
+            </div>
           )}
 
           {isOwn && pendingTx && (

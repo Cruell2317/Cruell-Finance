@@ -6,13 +6,16 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/context/AuthContext";
 import { useApp } from "@/context/AppContext";
 import { VA_BANK_OPTIONS } from "@/lib/payment-banks";
 import { uploadPaymentQris } from "@/lib/storage";
 import type { PaymentSettings } from "@/types";
 
 export default function PaymentSettingsPage() {
+  const { profile } = useAuth();
   const { paymentSettings, savePaymentSettings, coupleSpace } = useApp();
+  const isCreator = profile?.role === "CREATOR" || profile?.isSpaceCreator;
   const [form, setForm] = useState<PaymentSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -26,6 +29,21 @@ export default function PaymentSettingsPage() {
   if (!form || !coupleSpace) {
     return (
       <p className="py-12 text-center text-[#8E8E93]">Memuat pengaturan...</p>
+    );
+  }
+
+  if (!isCreator) {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-[16px] font-semibold text-[#1C1C1E]">Akses terbatas</p>
+        <p className="mt-2 px-6 text-[14px] text-[#8E8E93]">
+          Hanya Space Administrator yang dapat mengubah QRIS dan nomor VA.
+          Anda dapat melihatnya saat checkout.
+        </p>
+        <Link href="/profil" className="mt-6 inline-block text-[15px] font-medium underline">
+          Kembali ke Profil
+        </Link>
+      </div>
     );
   }
 

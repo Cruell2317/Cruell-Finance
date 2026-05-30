@@ -434,11 +434,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
           input.paymentInstructions ?? paymentSettings?.paymentInstructions,
         updated_at: new Date().toISOString(),
       };
-      const { error } = await supabase.from("payment_settings").upsert(row);
+      if (profile.role !== "CREATOR" && !profile.isSpaceCreator) {
+        throw new Error("Hanya Space Administrator yang dapat mengubah pembayaran");
+      }
+
+      const { error } = await supabase.rpc("upsert_payment_settings", {
+        p_qris_image_url: row.qris_image_url,
+        p_account_holder_name: row.account_holder_name,
+        p_va_bca: row.va_bca,
+        p_va_bni: row.va_bni,
+        p_va_bri: row.va_bri,
+        p_va_permata: row.va_permata,
+        p_va_mandiri: row.va_mandiri,
+        p_va_cimb: row.va_cimb,
+        p_use_midtrans: row.use_midtrans,
+        p_payment_instructions: row.payment_instructions,
+      });
       if (error) throw error;
       await reloadData();
     },
-    [profile?.coupleSpaceId, paymentSettings, reloadData]
+    [profile, paymentSettings, reloadData]
   );
 
   const submitManualPaymentClaim = useCallback(

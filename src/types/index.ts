@@ -1,5 +1,7 @@
 export type PeriodStatus = "UNPAID" | "PAID" | "LATE";
 
+export type UserRole = "CREATOR" | "JOINER";
+
 export type OnboardingStep =
   | "login"
   | "pairing"
@@ -17,6 +19,7 @@ export interface Profile {
   coupleSpaceId: string | null;
   profileSetupDone: boolean;
   isSpaceCreator: boolean;
+  role: UserRole | null;
   savingStreak: number;
 }
 
@@ -37,6 +40,7 @@ export interface CoupleMember {
   displayName: string;
   avatarUrl: string | null;
   isCreator: boolean;
+  role: UserRole | null;
   savingStreak: number;
 }
 

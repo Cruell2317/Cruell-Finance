@@ -73,6 +73,10 @@ export async function middleware(request: NextRequest) {
 
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
+  if (pathname === "/" && !user) {
+    return NextResponse.redirect(new URL("/splash", request.url));
+  }
+
   if (!user && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));
   }

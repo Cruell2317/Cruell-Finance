@@ -13,6 +13,7 @@ import { useAuth } from "@/context/AuthContext";
 import { createClient } from "@/lib/supabase/client";
 import { fetchCoupleSpaceData } from "@/lib/db/fetch-space-data";
 import { isValidPairingCode, normalizePairingCode } from "@/lib/pairing";
+import { broadcastCoupleEvent } from "@/lib/realtime/couple-channels";
 import type { CoupleMember, CoupleSpace, OnboardingStep } from "@/types";
 
 interface OnboardingContextValue {
@@ -32,6 +33,7 @@ interface OnboardingContextValue {
   }) => Promise<void>;
   skipTargetStep: () => Promise<void>;
   refresh: () => Promise<void>;
+  disconnectCoupleSpace: () => Promise<void>;
 }
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
@@ -111,13 +113,31 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       const code = normalizePairingCode(rawCode);
       if (!isValidPairingCode(code)) throw new Error("Kode harus 6 karakter");
       const supabase = createClient();
-      const { error } = await supabase.rpc("join_couple_space", { p_code: code });
+      const { data: spaceId, error } = await supabase.rpc("join_couple_space", {
+        p_code: code,
+      });
       if (error) throw error;
       await refreshProfile();
       await loadState();
+      const sid = spaceId as string;
+      if (sid) {
+        await broadcastCoupleEvent(sid, { type: "paired", spaceId: sid });
+      }
     },
     [refreshProfile, loadState]
   );
+
+  const disconnectCoupleSpace = useCallback(async () => {
+    const spaceId = profile?.coupleSpaceId;
+    const supabase = createClient();
+    const { error } = await supabase.rpc("disconnect_couple_space");
+    if (error) throw error;
+    if (spaceId) {
+      await broadcastCoupleEvent(spaceId, { type: "disconnected", spaceId });
+    }
+    await refreshProfile();
+    await loadState();
+  }, [profile?.coupleSpaceId, refreshProfile, loadState]);
 
   const completeProfileSetup = useCallback(
     async (displayName: string, avatarUrl: string | null) => {
@@ -192,6 +212,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         completeTargetStep: finishOnboarding,
         skipTargetStep: () => finishOnboarding(),
         refresh: loadState,
+        disconnectCoupleSpace,
       }}
     >
       {children}

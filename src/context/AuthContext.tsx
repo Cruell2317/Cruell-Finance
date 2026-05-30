@@ -11,7 +11,7 @@ import {
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { publicEnvOk } from "@/lib/env";
-import type { Profile } from "@/types";
+import type { Profile, UserRole } from "@/types";
 
 interface AuthContextValue {
   profile: Profile | null;
@@ -19,31 +19,48 @@ interface AuthContextValue {
   isLoading: boolean;
   configReady: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    displayName: string
+  ) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateProfile: (displayName: string, avatarUrl: string | null) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function mapRole(
+  role: string | null | undefined,
+  isSpaceCreator: boolean
+): UserRole | null {
+  if (role === "CREATOR" || role === "JOINER") return role;
+  if (isSpaceCreator) return "CREATOR";
+  return null;
+}
+
 function fallbackProfile(user: User): Profile {
+  const metaName =
+    (user.user_metadata?.full_name as string) ??
+    (user.user_metadata?.display_name as string) ??
+    (user.user_metadata?.name as string);
   return {
     id: user.id,
     email: user.email ?? "",
-    displayName:
-      (user.user_metadata?.full_name as string) ??
-      (user.user_metadata?.name as string) ??
-      user.email?.split("@")[0] ??
-      "User",
+    displayName: metaName ?? user.email?.split("@")[0] ?? "User",
     avatarUrl: (user.user_metadata?.avatar_url as string) ?? null,
-    fullName: (user.user_metadata?.full_name as string) ?? null,
+    fullName: metaName ?? null,
     coupleSpaceId: null,
     profileSetupDone: false,
     isSpaceCreator: false,
+    role: null,
     savingStreak: 0,
   };
 }
 
-async function ensureUserRow(user: User) {
+async function ensureUserRow(user: User, displayName?: string) {
   try {
     const supabase = createClient();
     await supabase.from("users").upsert(
@@ -51,6 +68,7 @@ async function ensureUserRow(user: User) {
         id: user.id,
         email: user.email,
         display_name:
+          displayName ??
           (user.user_metadata?.full_name as string) ??
           user.email?.split("@")[0] ??
           "User",
@@ -59,7 +77,7 @@ async function ensureUserRow(user: User) {
       { onConflict: "id", ignoreDuplicates: true }
     );
   } catch {
-    /* RLS/network — fallback profile tetap dipakai */
+    /* fallback profile tetap dipakai */
   }
 }
 
@@ -69,12 +87,14 @@ async function loadProfileFromDb(userId: string): Promise<Profile | null> {
     const { data, error } = await supabase
       .from("users")
       .select(
-        "id, email, display_name, avatar_url, couple_space_id, profile_setup_done, is_space_creator, saving_streak"
+        "id, email, display_name, avatar_url, couple_space_id, profile_setup_done, is_space_creator, role, saving_streak"
       )
       .eq("id", userId)
       .maybeSingle();
 
     if (error || !data) return null;
+
+    const role = mapRole(data.role as string | null, data.is_space_creator);
 
     return {
       id: data.id,
@@ -85,6 +105,7 @@ async function loadProfileFromDb(userId: string): Promise<Profile | null> {
       coupleSpaceId: data.couple_space_id,
       profileSetupDone: data.profile_setup_done,
       isSpaceCreator: data.is_space_creator,
+      role,
       savingStreak: data.saving_streak ?? 0,
     };
   } catch {
@@ -182,9 +203,85 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [configReady, syncDbProfile]);
 
   const signInWithGoogle = useCallback(async () => {
-    // OAuth harus dimulai di server (/auth/google) agar PKCE verifier ada di cookie
     window.location.assign("/auth/google");
   }, []);
+
+  const signInWithEmail = useCallback(
+    async (email: string, password: string) => {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) throw error;
+      if (data.user) {
+        setUser(data.user);
+        const next = applyUser(data.user);
+        setProfile(next.profile);
+        await syncDbProfile(data.user);
+      }
+    },
+    [syncDbProfile]
+  );
+
+  const signUpWithEmail = useCallback(
+    async (email: string, password: string, displayName: string) => {
+      const supabase = createClient();
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            full_name: displayName.trim(),
+            display_name: displayName.trim(),
+          },
+        },
+      });
+      if (error) throw error;
+      if (!data.user) throw new Error("Registrasi gagal");
+
+      await ensureUserRow(data.user, displayName.trim());
+      await supabase
+        .from("users")
+        .update({ display_name: displayName.trim() })
+        .eq("id", data.user.id);
+
+      if (data.session) {
+        setUser(data.user);
+        const next = applyUser(data.user);
+        setProfile({ ...next.profile, displayName: displayName.trim() });
+      } else {
+        const { error: loginErr } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (loginErr) {
+          throw new Error(
+            "Akun dibuat. Aktifkan email di Supabase atau coba login."
+          );
+        }
+        await refreshProfile();
+      }
+    },
+    [refreshProfile]
+  );
+
+  const updateProfile = useCallback(
+    async (displayName: string, avatarUrl: string | null) => {
+      if (!profile) return;
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("users")
+        .update({
+          display_name: displayName.trim(),
+          avatar_url: avatarUrl,
+        })
+        .eq("id", profile.id);
+      if (error) throw error;
+      await refreshProfile();
+    },
+    [profile, refreshProfile]
+  );
 
   const signOut = useCallback(async () => {
     const supabase = createClient();
@@ -201,8 +298,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         configReady,
         signInWithGoogle,
+        signInWithEmail,
+        signUpWithEmail,
         signOut,
         refreshProfile,
+        updateProfile,
       }}
     >
       {children}

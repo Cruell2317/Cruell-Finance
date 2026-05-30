@@ -8,12 +8,24 @@ import { useAuth } from "@/context/AuthContext";
 import { getOnboardingPath } from "@/lib/onboarding-routes";
 import { useOnboarding } from "@/context/OnboardingContext";
 
+type AuthMode = "login" | "register";
+
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { profile, signInWithGoogle, isLoading } = useAuth();
+  const {
+    profile,
+    signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
+    isLoading,
+  } = useAuth();
   const { step, isLoading: onboardingLoading } = useOnboarding();
-  const [signingIn, setSigningIn] = useState(false);
+  const [mode, setMode] = useState<AuthMode>("login");
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -23,7 +35,7 @@ function LoginContent() {
       setError(
         detail
           ? `Login gagal: ${detail}`
-          : "Login gagal. Coba lagi atau buka di Chrome/Safari (bukan in-app browser)."
+          : "Login gagal. Coba lagi di Chrome/Safari."
       );
     }
   }, [searchParams]);
@@ -34,35 +46,118 @@ function LoginContent() {
     }
   }, [profile, step, isLoading, onboardingLoading, router]);
 
-  const handleGoogle = async () => {
-    setSigningIn(true);
+  const handleEmail = async () => {
+    setBusy(true);
     setError("");
     try {
-      await signInWithGoogle();
+      if (mode === "register") {
+        if (!displayName.trim()) throw new Error("Nama tampilan wajib diisi");
+        await signUpWithEmail(email, password, displayName);
+      } else {
+        await signInWithEmail(email, password);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Login gagal");
-      setSigningIn(false);
+      setError(e instanceof Error ? e.message : "Autentikasi gagal");
+    } finally {
+      setBusy(false);
     }
+  };
+
+  const handleGoogle = () => {
+    setBusy(true);
+    setError("");
+    void signInWithGoogle();
   };
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-white px-6">
-      <div className="flex flex-1 flex-col justify-center">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-[28px] font-bold text-[#1C1C1E]">Cruell Finance</h1>
+      <div className="flex flex-1 flex-col justify-center pb-8">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+          <h1 className="text-[28px] font-bold text-[#1C1C1E]">Cruell Financial</h1>
           <p className="mt-2 text-[17px] text-[#8E8E93]">
-            Masuk dengan Google untuk memulai tabungan bersama.
+            Tabungan bersama pasangan — masuk atau daftar.
           </p>
+
+          <div className="mt-8 flex rounded-2xl border border-[#E5E5EA] bg-[#F7F7F9] p-1">
+            <button
+              type="button"
+              onClick={() => setMode("login")}
+              className={`flex-1 rounded-xl py-2.5 text-[15px] font-semibold ${
+                mode === "login" ? "bg-white text-[#1C1C1E] shadow-sm" : "text-[#8E8E93]"
+              }`}
+            >
+              Login
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("register")}
+              className={`flex-1 rounded-xl py-2.5 text-[15px] font-semibold ${
+                mode === "register" ? "bg-white text-[#1C1C1E] shadow-sm" : "text-[#8E8E93]"
+              }`}
+            >
+              Daftar
+            </button>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {mode === "register" && (
+              <input
+                type="text"
+                placeholder="Nama tampilan"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full rounded-2xl border border-[#E5E5EA] bg-[#F7F7F9] px-4 py-3.5 text-[16px] outline-none focus:border-[#3A3A3C]"
+              />
+            )}
+            <input
+              type="email"
+              placeholder="Email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full rounded-2xl border border-[#E5E5EA] bg-[#F7F7F9] px-4 py-3.5 text-[16px] outline-none focus:border-[#3A3A3C]"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              autoComplete={mode === "register" ? "new-password" : "current-password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-2xl border border-[#E5E5EA] bg-[#F7F7F9] px-4 py-3.5 text-[16px] outline-none focus:border-[#3A3A3C]"
+            />
+          </div>
+
           <Button
             type="button"
             fullWidth
             variant="dark"
-            className="mt-10 gap-3"
-            onClick={handleGoogle}
-            disabled={signingIn}
+            className="mt-4"
+            onClick={() => void handleEmail()}
+            disabled={busy || !email || !password}
           >
-            {signingIn ? "Mengalihkan ke Google..." : "Sign in with Google"}
+            {busy
+              ? "Memproses..."
+              : mode === "register"
+                ? "Daftar dengan Email"
+                : "Login dengan Email"}
           </Button>
+
+          <div className="my-6 flex items-center gap-3">
+            <div className="h-px flex-1 bg-[#E5E5EA]" />
+            <span className="text-[13px] text-[#8E8E93]">atau</span>
+            <div className="h-px flex-1 bg-[#E5E5EA]" />
+          </div>
+
+          <Button
+            type="button"
+            fullWidth
+            variant="secondary"
+            onClick={handleGoogle}
+            disabled={busy}
+          >
+            {busy ? "Mengalihkan..." : "Sign in with Google"}
+          </Button>
+
           {error && (
             <p className="mt-4 rounded-xl bg-[#FF3B30]/10 px-4 py-3 text-center text-[14px] text-[#FF3B30]">
               {error}

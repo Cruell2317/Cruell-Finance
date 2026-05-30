@@ -2,55 +2,66 @@
 
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { getOnboardingPath } from "@/lib/onboarding-routes";
 
+const SPLASH_MS = 2000;
+
 export default function SplashPage() {
   const router = useRouter();
-  const { profile, isLoading: authLoading } = useAuth();
-  const { step, isLoading: onboardingLoading } = useOnboarding();
+  const { profile, user, isLoading: authLoading } = useAuth();
+  const { step, isLoading: onboardingLoading, isPaired } = useOnboarding();
+  const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
+    const timer = setTimeout(() => setSplashDone(true), SPLASH_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!splashDone) return;
     if (authLoading || onboardingLoading) return;
 
-    if (profile) {
-      router.replace(getOnboardingPath(step));
+    if (!user && !profile) {
+      router.replace("/login");
       return;
     }
 
-    const timer = setTimeout(() => {
-      router.replace("/login");
-    }, 1500);
+    if (step === "complete" && isPaired && profile?.coupleSpaceId) {
+      router.replace("/");
+      return;
+    }
 
-    return () => clearTimeout(timer);
-  }, [profile, step, authLoading, onboardingLoading, router]);
+    router.replace(getOnboardingPath(step));
+  }, [
+    splashDone,
+    authLoading,
+    onboardingLoading,
+    profile,
+    user,
+    step,
+    isPaired,
+    router,
+  ]);
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center bg-gradient-to-b from-white to-[#F7F7F9]">
+    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center bg-white">
       <motion.div
-        initial={{ opacity: 0, scale: 0.92 }}
+        initial={{ opacity: 0, scale: 0.88 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
         className="text-center"
       >
         <motion.h1
-          className="text-[32px] font-semibold tracking-tight text-[#1C1C1E]"
-          initial={{ opacity: 0, y: 8 }}
+          className="text-[34px] font-semibold tracking-tight text-[#1C1C1E]"
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.8 }}
+          transition={{ delay: 0.2, duration: 0.9 }}
         >
-          Cruell Finance
+          Cruell Financial
         </motion.h1>
-        <motion.p
-          className="mt-2 text-[15px] text-[#8E8E93]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.7, duration: 0.6 }}
-        >
-          Tabungan bersama
-        </motion.p>
       </motion.div>
     </div>
   );
