@@ -8,12 +8,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { publicEnvOk } from "@/lib/env";
 import type { Profile } from "@/types";
 
 interface AuthContextValue {
   profile: Profile | null;
+  user: User | null;
   isLoading: boolean;
   configReady: boolean;
   signInWithGoogle: () => Promise<void>;
@@ -23,6 +25,41 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function fallbackProfile(user: User): Profile {
+  return {
+    id: user.id,
+    email: user.email ?? "",
+    displayName:
+      (user.user_metadata?.full_name as string) ??
+      (user.user_metadata?.name as string) ??
+      user.email?.split("@")[0] ??
+      "User",
+    avatarUrl: (user.user_metadata?.avatar_url as string) ?? null,
+    fullName: (user.user_metadata?.full_name as string) ?? null,
+    coupleSpaceId: null,
+    profileSetupDone: false,
+    isSpaceCreator: false,
+    savingStreak: 0,
+  };
+}
+
+async function ensureUserRow(user: User) {
+  const supabase = createClient();
+  await supabase.from("users").upsert(
+    {
+      id: user.id,
+      email: user.email,
+      display_name:
+        (user.user_metadata?.full_name as string) ??
+        (user.user_metadata?.name as string) ??
+        user.email?.split("@")[0] ??
+        "User",
+      avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
+    },
+    { onConflict: "id", ignoreDuplicates: true }
+  );
+}
+
 async function loadProfileFromDb(userId: string): Promise<Profile | null> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -31,7 +68,7 @@ async function loadProfileFromDb(userId: string): Promise<Profile | null> {
       "id, email, display_name, avatar_url, couple_space_id, profile_setup_done, is_space_creator, saving_streak"
     )
     .eq("id", userId)
-    .single();
+    .maybeSingle();
 
   if (error || !data) return null;
 
@@ -50,21 +87,29 @@ async function loadProfileFromDb(userId: string): Promise<Profile | null> {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const configReady = publicEnvOk();
+
+  const hydrateFromUser = useCallback(async (authUser: User) => {
+    setUser(authUser);
+    await ensureUserRow(authUser);
+    const dbProfile = await loadProfileFromDb(authUser.id);
+    setProfile(dbProfile ?? fallbackProfile(authUser));
+  }, []);
 
   const refreshProfile = useCallback(async () => {
     const supabase = createClient();
     const {
-      data: { user },
+      data: { user: authUser },
     } = await supabase.auth.getUser();
-    if (!user) {
+    if (!authUser) {
+      setUser(null);
       setProfile(null);
       return;
     }
-    const p = await loadProfileFromDb(user.id);
-    setProfile(p);
-  }, []);
+    await hydrateFromUser(authUser);
+  }, [hydrateFromUser]);
 
   useEffect(() => {
     if (!configReady) {
@@ -74,25 +119,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const supabase = createClient();
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        loadProfileFromDb(session.user.id).then(setProfile);
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      if (authUser) {
+        hydrateFromUser(authUser).finally(() => setIsLoading(false));
+      } else {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        setProfile(await loadProfileFromDb(session.user.id));
-      } else {
+        await hydrateFromUser(session.user);
+      } else if (event === "SIGNED_OUT") {
+        setUser(null);
         setProfile(null);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [configReady]);
+  }, [configReady, hydrateFromUser]);
 
   const signInWithGoogle = useCallback(async () => {
     const supabase = createClient();
@@ -105,14 +152,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error) throw error;
-    if (data?.url) {
-      window.location.assign(data.url);
-    }
+    if (data?.url) window.location.assign(data.url);
   }, []);
 
   const signOut = useCallback(async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
+    setUser(null);
     setProfile(null);
   }, []);
 
@@ -120,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         profile,
+        user,
         isLoading,
         configReady,
         signInWithGoogle,

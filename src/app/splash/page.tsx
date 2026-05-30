@@ -15,13 +15,14 @@ export default function SplashPage() {
   useEffect(() => {
     if (authLoading || onboardingLoading) return;
 
+    if (profile) {
+      router.replace(getOnboardingPath(step));
+      return;
+    }
+
     const timer = setTimeout(() => {
-      if (profile) {
-        router.replace(getOnboardingPath(step));
-      } else {
-        router.replace("/login");
-      }
-    }, 2500);
+      router.replace("/login");
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, [profile, step, authLoading, onboardingLoading, router]);

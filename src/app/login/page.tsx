@@ -18,8 +18,13 @@ function LoginContent() {
 
   useEffect(() => {
     const authError = searchParams.get("error");
+    const detail = searchParams.get("error_detail");
     if (authError === "auth_callback") {
-      setError("Login gagal. Coba lagi atau buka di Chrome/Safari (bukan in-app browser).");
+      setError(
+        detail
+          ? `Login gagal: ${detail}`
+          : "Login gagal. Coba lagi atau buka di Chrome/Safari (bukan in-app browser)."
+      );
     }
   }, [searchParams]);
 

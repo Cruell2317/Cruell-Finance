@@ -7,7 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 
 export function OnboardingGuard({ children }: { children: ReactNode }) {
-  const { profile, isLoading: authLoading } = useAuth();
+  const { profile, user, isLoading: authLoading } = useAuth();
   const { step, isLoading: onboardingLoading } = useOnboarding();
   const router = useRouter();
   const pathname = usePathname();
@@ -16,7 +16,7 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (authLoading || onboardingLoading) return;
-    if (!profile) {
+    if (!profile && !user) {
       router.replace("/login");
       return;
     }
@@ -51,7 +51,7 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!profile) {
+  if (!profile && !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E5E5EA] border-t-[#1C1C1E]" />

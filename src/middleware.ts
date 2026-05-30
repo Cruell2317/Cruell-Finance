@@ -17,7 +17,7 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/icons") ||
     pathname === "/manifest.json" ||
     pathname === "/sw.js" ||
-    pathname.match(/\.(svg|png|jpg|ico)$/)
+    pathname.match(/\.(svg|png|jpg|ico|webp)$/)
   ) {
     return NextResponse.next();
   }
@@ -55,7 +55,7 @@ export async function middleware(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
   if (!user && !isPublic) {
-    return NextResponse.redirect(new URL("/splash", request.url));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   if (user && (pathname === "/splash" || pathname === "/login")) {
