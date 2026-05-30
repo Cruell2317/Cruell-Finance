@@ -1,8 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { X } from "lucide-react";
-import Image from "next/image";
+import { Download, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -67,14 +66,9 @@ export function PWAInstallPrompt() {
           <div className="rounded-2xl border border-[#E5E5EA] bg-white p-4 shadow-xl">
             <div className="flex items-start justify-between gap-2">
               <div className="flex gap-3">
-                <Image
-                  src="/icons/icon-128.png"
-                  alt="Cruell Financial"
-                  width={44}
-                  height={44}
-                  className="h-11 w-11 rounded-xl border border-[#E5E5EA]"
-                  unoptimized
-                />
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#F7F7F9]">
+                  <Download className="h-5 w-5 text-[#1C1C1E]" />
+                </div>
                 <div>
                   <p className="font-bold text-[#1C1C1E]">Pasang di HP</p>
                   <p className="text-[13px] text-[#8E8E93]">
