@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -73,6 +74,14 @@ function LoginContent() {
     <div className="mx-auto flex min-h-screen max-w-md flex-col bg-white px-6">
       <div className="flex flex-1 flex-col justify-center pb-8">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+          <Image
+            src="/icons/icon-128.png"
+            alt="Cruell Financial"
+            width={72}
+            height={72}
+            className="mb-5 rounded-2xl border border-[#E5E5EA]"
+            unoptimized
+          />
           <h1 className="text-[28px] font-bold text-[#1C1C1E]">Cruell Financial</h1>
           <p className="mt-2 text-[17px] text-[#8E8E93]">
             Tabungan bersama pasangan — masuk atau daftar.
