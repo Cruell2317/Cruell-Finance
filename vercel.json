@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/generate-periods",
+      "schedule": "0 0 1 * *"
+    },
+    {
+      "path": "/api/cron/apply-penalties",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

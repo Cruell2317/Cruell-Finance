@@ -1,0 +1,20 @@
+{
+  "name": "Cruell Finance",
+  "short_name": "Cruell",
+  "description": "Tabungan bersama pasangan",
+  "start_url": "/splash",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FFFFFF",
+  "theme_color": "#1C1C1E",
+  "lang": "id",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
