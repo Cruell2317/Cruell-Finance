@@ -182,17 +182,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [configReady, syncDbProfile]);
 
   const signInWithGoogle = useCallback(async () => {
-    const supabase = createClient();
-    const redirectTo = `${window.location.origin}/auth/callback`;
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo,
-        queryParams: { prompt: "select_account" },
-      },
-    });
-    if (error) throw error;
-    if (data?.url) window.location.assign(data.url);
+    // OAuth harus dimulai di server (/auth/google) agar PKCE verifier ada di cookie
+    window.location.assign("/auth/google");
   }, []);
 
   const signOut = useCallback(async () => {

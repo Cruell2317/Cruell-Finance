@@ -5,6 +5,7 @@ const PUBLIC_PATHS = [
   "/splash",
   "/login",
   "/auth/callback",
+  "/auth/google",
   "/checkout",
   "/onboarding",
 ];
@@ -32,8 +33,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // OAuth callback: biarkan route handler tukar code → cookie
-  if (pathname.startsWith("/auth/callback") && searchParams.has("code")) {
+  // OAuth routes: jangan ganggu PKCE cookie exchange
+  if (
+    pathname.startsWith("/auth/google") ||
+    (pathname.startsWith("/auth/callback") && searchParams.has("code"))
+  ) {
     return NextResponse.next();
   }
 

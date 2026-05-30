@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createRouteHandlerClient } from "@/lib/supabase/route-handler";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -20,24 +20,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  let response = NextResponse.redirect(`${origin}/onboarding/pairing`);
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
+  const { supabase, applyCookiesTo } = createRouteHandlerClient(request);
 
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
@@ -66,5 +49,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return response;
+  return applyCookiesTo(
+    NextResponse.redirect(`${origin}/onboarding/pairing`)
+  );
 }
