@@ -17,7 +17,7 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (authLoading || onboardingLoading) return;
     if (!profile) {
-      router.replace("/splash");
+      router.replace("/login");
       return;
     }
 
@@ -51,7 +51,13 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!profile) return null;
+  if (!profile) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#E5E5EA] border-t-[#1C1C1E]" />
+      </div>
+    );
+  }
 
   if (step !== "complete" && !isOnboardingRoute) return null;
 
