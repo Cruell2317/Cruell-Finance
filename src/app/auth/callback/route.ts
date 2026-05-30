@@ -35,7 +35,11 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return response;
     }
+
+    console.error("auth callback exchange failed:", error.message);
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth_callback`);
+  const loginUrl = new URL("/login", origin);
+  loginUrl.searchParams.set("error", "auth_callback");
+  return NextResponse.redirect(loginUrl);
 }

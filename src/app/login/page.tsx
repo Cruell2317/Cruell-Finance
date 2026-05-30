@@ -1,19 +1,27 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/context/AuthContext";
 import { getOnboardingPath } from "@/lib/onboarding-routes";
 import { useOnboarding } from "@/context/OnboardingContext";
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { profile, signInWithGoogle, isLoading } = useAuth();
   const { step, isLoading: onboardingLoading } = useOnboarding();
   const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const authError = searchParams.get("error");
+    if (authError === "auth_callback") {
+      setError("Login gagal. Coba lagi atau buka di Chrome/Safari (bukan in-app browser).");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!isLoading && !onboardingLoading && profile) {
@@ -41,17 +49,30 @@ export default function LoginPage() {
             Masuk dengan Google untuk memulai tabungan bersama.
           </p>
           <Button
+            type="button"
             fullWidth
             variant="dark"
             className="mt-10 gap-3"
             onClick={handleGoogle}
             disabled={signingIn}
           >
-            {signingIn ? "Mengalihkan..." : "Sign in with Google"}
+            {signingIn ? "Mengalihkan ke Google..." : "Sign in with Google"}
           </Button>
-          {error && <p className="mt-4 text-center text-[14px] text-[#FF3B30]">{error}</p>}
+          {error && (
+            <p className="mt-4 rounded-xl bg-[#FF3B30]/10 px-4 py-3 text-center text-[14px] text-[#FF3B30]">
+              {error}
+            </p>
+          )}
         </motion.div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-[#8E8E93]">Memuat...</div>}>
+      <LoginContent />
+    </Suspense>
   );
 }
