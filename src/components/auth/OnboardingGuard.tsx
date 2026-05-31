@@ -3,6 +3,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { getOnboardingPath } from "@/lib/onboarding-routes";
+import { isOptimisticPaired } from "@/lib/realtime/pairing-broadcast";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -77,7 +78,7 @@ function MainAppGuard({ children }: { children: ReactNode }) {
       router.replace("/login");
       return;
     }
-    if (step !== "complete") {
+    if (step !== "complete" && !isOptimisticPaired()) {
       router.replace(getOnboardingPath(step));
     }
   }, [bootDone, authLoading, isAuthed, step, router]);
@@ -89,6 +90,9 @@ function MainAppGuard({ children }: { children: ReactNode }) {
   if (!isAuthed) return null;
 
   if (step !== "complete" && isMainAppPath(pathname)) {
+    if (isOptimisticPaired()) {
+      return <LoadingScreen message="Menyelesaikan hubungan..." />;
+    }
     return <LoadingScreen message="Menyiapkan akun..." />;
   }
 

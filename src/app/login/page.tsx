@@ -150,7 +150,7 @@ function LoginContent() {
             onClick={handleGoogle}
             disabled={busy}
           >
-            {busy ? "Mengalihkan..." : "Lanjutkan dengan Google"}
+            {busy ? "Mengalihkan ke Google..." : "Lanjutkan dengan Google"}
           </Button>
 
           <p className="mt-4 text-center text-[12px] text-[#8E8E93]">

@@ -2,23 +2,30 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Copy, Heart, Link2, Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { PairingSuccessOverlay } from "@/components/onboarding/PairingSuccessOverlay";
 import { useOnboarding } from "@/context/OnboardingContext";
-import { subscribeCoupleChannel } from "@/lib/realtime/couple-channels";
+import { isValidPairingCode, normalizePairingCode } from "@/lib/pairing";
+import {
+  broadcastPairingPaired,
+  setOptimisticPaired,
+  subscribePairingBroadcast,
+} from "@/lib/realtime/pairing-broadcast";
 import { useRouter } from "next/navigation";
 
 type Mode = "choose" | "create" | "join";
+
+const SUCCESS_ROUTE_MS = 650;
 
 export default function PairingPage() {
   const router = useRouter();
   const {
     coupleSpace,
     members,
-    isPaired,
     createCoupleSpace,
-    joinCoupleSpace,
+    joinCoupleSpaceInBackground,
     cancelCoupleSpace,
     refresh,
     finalizePairing,
@@ -27,6 +34,15 @@ export default function PairingPage() {
   const [mode, setMode] = useState<Mode>("choose");
   const [code, setCode] = useState("");
   const [generatedCode, setGeneratedCode] = useState("");
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [cancellingCreate, setCancellingCreate] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const joinAbortRef = useRef(false);
+  const lockedCodeRef = useRef("");
+  const routedRef = useRef(false);
 
   useEffect(() => {
     if (coupleSpace?.pairingCode) {
@@ -34,30 +50,47 @@ export default function PairingPage() {
       setMode("create");
     }
   }, [coupleSpace?.pairingCode]);
-  const [error, setError] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [cancellingCreate, setCancellingCreate] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const joinAbortRef = useRef(false);
-  const lockedCodeRef = useRef("");
 
   useEffect(() => {
-    if (!coupleSpace?.id) return;
-    return subscribeCoupleChannel(coupleSpace.id, async (event) => {
-      if (event.type === "paired") {
-        await refresh();
-        await finalizePairing();
-        router.replace("/");
-      }
-    });
-  }, [coupleSpace?.id, refresh, finalizePairing, router]);
-
-  useEffect(() => {
-    if (isPaired) {
-      void finalizePairing().then(() => router.replace("/"));
+    const stored = sessionStorage.getItem("pairing_error");
+    if (stored) {
+      setError(stored);
+      sessionStorage.removeItem("pairing_error");
     }
-  }, [isPaired, finalizePairing, router]);
+  }, []);
+
+  const goDashboardAfterSuccess = useCallback(() => {
+    if (routedRef.current) return;
+    routedRef.current = true;
+    window.setTimeout(() => router.replace("/"), SUCCESS_ROUTE_MS);
+  }, [router]);
+
+  const triggerOptimisticPaired = useCallback(
+    (_matchedCode: string) => {
+      setOptimisticPaired();
+      setShowSuccess(true);
+      setConnecting(false);
+      goDashboardAfterSuccess();
+
+      void (async () => {
+        try {
+          await refresh();
+          await finalizePairing();
+        } catch {
+          /* DB menyusul di background */
+        }
+      })();
+    },
+    [goDashboardAfterSuccess, refresh, finalizePairing]
+  );
+
+  useEffect(() => {
+    return subscribePairingBroadcast((incomingCode) => {
+      if (mode !== "create" || !generatedCode) return;
+      if (incomingCode !== normalizePairingCode(generatedCode)) return;
+      triggerOptimisticPaired(incomingCode);
+    });
+  }, [mode, generatedCode, triggerOptimisticPaired]);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -87,28 +120,41 @@ export default function PairingPage() {
     }
   };
 
-  const handleJoin = async () => {
+  const handleJoin = () => {
+    const normalized = normalizePairingCode(code);
+    if (!isValidPairingCode(normalized)) {
+      setError("Kode harus 6 karakter");
+      return;
+    }
+
     joinAbortRef.current = false;
-    lockedCodeRef.current = code;
+    lockedCodeRef.current = normalized;
     setConnecting(true);
     setError("");
-    try {
-      await joinCoupleSpace(lockedCodeRef.current, {
-        isAborted: () => joinAbortRef.current,
-      });
-      if (joinAbortRef.current) return;
-      router.replace("/");
-    } catch (e) {
+
+    broadcastPairingPaired(normalized);
+    triggerOptimisticPaired(normalized);
+
+    void joinCoupleSpaceInBackground(normalized, {
+      isAborted: () => joinAbortRef.current,
+    }).catch((e) => {
       if (e instanceof Error && e.message === "ABORTED") return;
-      setError(e instanceof Error ? e.message : "Kode tidak valid");
-    } finally {
-      if (!joinAbortRef.current) setConnecting(false);
-    }
+      routedRef.current = false;
+      setShowSuccess(false);
+      setConnecting(false);
+      sessionStorage.setItem(
+        "pairing_error",
+        e instanceof Error ? e.message : "Kode tidak valid"
+      );
+      router.replace("/onboarding/pairing");
+    });
   };
 
   const handleCancelJoin = () => {
     joinAbortRef.current = true;
+    routedRef.current = false;
     setConnecting(false);
+    setShowSuccess(false);
     setError("");
   };
 
@@ -121,13 +167,15 @@ export default function PairingPage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center bg-white px-6">
+      <PairingSuccessOverlay show={showSuccess} />
+
       <h1 className="text-center text-[26px] font-bold text-[#1C1C1E]">Hubungkan Ruang</h1>
       <p className="mt-2 text-center text-[15px] text-[#8E8E93]">
-        Realtime WebSocket — tanpa polling.
+        Pairing optimistik — broadcast realtime
       </p>
 
       <AnimatePresence mode="wait">
-        {mode === "choose" && (
+        {mode === "choose" && !showSuccess && (
           <motion.div
             key="choose"
             initial={{ opacity: 0, y: 8 }}
@@ -160,7 +208,7 @@ export default function PairingPage() {
           </motion.div>
         )}
 
-        {mode === "create" && !generatedCode && (
+        {mode === "create" && !generatedCode && !showSuccess && (
           <motion.div
             key="create-init"
             initial={{ opacity: 0 }}
@@ -177,7 +225,7 @@ export default function PairingPage() {
           </motion.div>
         )}
 
-        {mode === "create" && generatedCode && (
+        {mode === "create" && generatedCode && !showSuccess && (
           <motion.div
             key="create-code"
             initial={{ opacity: 0, scale: 0.98 }}
@@ -218,7 +266,7 @@ export default function PairingPage() {
           </motion.div>
         )}
 
-        {mode === "join" && (
+        {mode === "join" && !showSuccess && (
           <motion.div
             key="join"
             initial={{ opacity: 0, y: 8 }}
@@ -233,25 +281,21 @@ export default function PairingPage() {
                 maxLength={6}
                 disabled={connecting}
                 placeholder="6 digit"
-                className={`w-full rounded-3xl border px-4 py-4 text-center font-mono text-[28px] font-bold tracking-widest outline-none transition-opacity ${
+                className={`w-full rounded-3xl border px-4 py-4 text-center font-mono text-[28px] font-bold tracking-widest outline-none ${
                   connecting
-                    ? "cursor-not-allowed border-[#E5E5EA] bg-[#F7F7F9] text-[#8E8E93] opacity-80"
+                    ? "cursor-not-allowed border-[#E5E5EA] bg-[#F7F7F9] text-[#8E8E93]"
                     : "border-[#E5E5EA] bg-[#F7F7F9] text-[#1C1C1E]"
                 }`}
               />
               {connecting && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/40">
                   <Loader2 className="h-8 w-8 animate-spin text-[#1C1C1E]" />
                 </div>
               )}
             </div>
 
             {connecting ? (
-              <Button
-                fullWidth
-                variant="secondary"
-                onClick={handleCancelJoin}
-              >
+              <Button fullWidth variant="secondary" onClick={handleCancelJoin}>
                 Batal
               </Button>
             ) : (
@@ -259,7 +303,7 @@ export default function PairingPage() {
                 <Button
                   fullWidth
                   variant="dark"
-                  onClick={() => void handleJoin()}
+                  onClick={handleJoin}
                   disabled={code.length < 6}
                 >
                   Hubungkan
@@ -273,7 +317,7 @@ export default function PairingPage() {
         )}
       </AnimatePresence>
 
-      {error && (
+      {error && !showSuccess && (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

@@ -8,7 +8,7 @@ import { useOnboarding } from "@/context/OnboardingContext";
 import { getOnboardingPath } from "@/lib/onboarding-routes";
 
 const INTRO_DURATION = 0.8;
-const HOLD_MS = 700;
+const HOLD_MS = 1500;
 const OUTRO_DURATION = 0.55;
 
 export default function SplashPage() {

@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchCoupleSpaceData } from "@/lib/db/fetch-space-data";
 import { isValidPairingCode, normalizePairingCode } from "@/lib/pairing";
 import { broadcastCoupleEvent } from "@/lib/realtime/couple-channels";
+import { clearOptimisticPaired } from "@/lib/realtime/pairing-broadcast";
 import type { CoupleMember, CoupleSpace, OnboardingStep } from "@/types";
 
 interface OnboardingContextValue {
@@ -23,7 +24,8 @@ interface OnboardingContextValue {
   isPaired: boolean;
   isLoading: boolean;
   createCoupleSpace: () => Promise<{ code: string }>;
-  joinCoupleSpace: (
+  /** Hanya DB — dipanggil di background setelah UI optimistik. */
+  joinCoupleSpaceInBackground: (
     code: string,
     opts?: { isAborted?: () => boolean }
   ) => Promise<void>;
@@ -87,7 +89,11 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     if (!profile) return user ? "pairing" : "login";
     if (!profile.coupleSpaceId || !isPaired) return "pairing";
     if (!coupleSpace?.onboardingComplete) return "pairing";
-    return "complete";
+    if (coupleSpace?.onboardingComplete) {
+      clearOptimisticPaired();
+      return "complete";
+    }
+    return "pairing";
   }, [profile, user, isPaired, coupleSpace]);
 
   const finalizePairing = useCallback(async () => {
@@ -114,16 +120,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     return { code: row.pairing_code as string };
   }, [refreshProfile, loadState]);
 
-  const joinCoupleSpace = useCallback(
+  const joinCoupleSpaceInBackground = useCallback(
     async (rawCode: string, opts?: { isAborted?: () => boolean }) => {
       const code = normalizePairingCode(rawCode);
       if (!isValidPairingCode(code)) throw new Error("Kode harus 6 karakter");
       throwIfAborted(opts?.isAborted);
 
       const supabase = createClient();
-      const { data: spaceId, error } = await supabase.rpc("join_couple_space", {
-        p_code: code,
-      });
+      const { error } = await supabase.rpc("join_couple_space", { p_code: code });
       if (error) throw error;
       throwIfAborted(opts?.isAborted);
 
@@ -132,12 +136,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       await loadState();
       throwIfAborted(opts?.isAborted);
       await finalizePairing();
-      throwIfAborted(opts?.isAborted);
-
-      const sid = spaceId as string;
-      if (sid) {
-        await broadcastCoupleEvent(sid, { type: "paired", spaceId: sid });
-      }
     },
     [refreshProfile, loadState, finalizePairing]
   );
@@ -171,7 +169,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         isPaired,
         isLoading,
         createCoupleSpace,
-        joinCoupleSpace,
+        joinCoupleSpaceInBackground,
         cancelCoupleSpace,
         refresh: loadState,
         disconnectCoupleSpace,
