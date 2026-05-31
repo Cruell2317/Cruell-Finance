@@ -51,7 +51,7 @@ export default function SplashPage() {
           <motion.div
             key="cruell-splash"
             className="flex min-h-screen items-center justify-center"
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.8 }}
             animate={{
               opacity: 1,
               scale: 1,
@@ -59,7 +59,7 @@ export default function SplashPage() {
             }}
             exit={{
               opacity: 0,
-              scale: 0.95,
+              scale: 0.8,
               transition: { duration: OUTRO_DURATION, ease: [0.22, 1, 0.36, 1] },
             }}
           >

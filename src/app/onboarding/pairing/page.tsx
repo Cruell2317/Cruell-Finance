@@ -5,30 +5,23 @@ import { Copy, Heart, Link2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { PairingSuccessOverlay } from "@/components/onboarding/PairingSuccessOverlay";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { isValidPairingCode, normalizePairingCode } from "@/lib/pairing";
-import {
-  broadcastPairingPaired,
-  setOptimisticPaired,
-  subscribePairingBroadcast,
-} from "@/lib/realtime/pairing-broadcast";
+import { subscribeSpaceMemberChanges } from "@/lib/realtime/space-members";
 import { useRouter } from "next/navigation";
 
 type Mode = "choose" | "create" | "join";
-
-const SUCCESS_ROUTE_MS = 650;
 
 export default function PairingPage() {
   const router = useRouter();
   const {
     coupleSpace,
     members,
+    isPaired,
     createCoupleSpace,
-    joinCoupleSpaceInBackground,
+    joinCoupleSpaceInstant,
     cancelCoupleSpace,
     refresh,
-    finalizePairing,
   } = useOnboarding();
 
   const [mode, setMode] = useState<Mode>("choose");
@@ -38,11 +31,8 @@ export default function PairingPage() {
   const [creating, setCreating] = useState(false);
   const [cancellingCreate, setCancellingCreate] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
   const [copied, setCopied] = useState(false);
-  const joinAbortRef = useRef(false);
   const lockedCodeRef = useRef("");
-  const routedRef = useRef(false);
 
   useEffect(() => {
     if (coupleSpace?.pairingCode) {
@@ -51,46 +41,24 @@ export default function PairingPage() {
     }
   }, [coupleSpace?.pairingCode]);
 
-  useEffect(() => {
-    const stored = sessionStorage.getItem("pairing_error");
-    if (stored) {
-      setError(stored);
-      sessionStorage.removeItem("pairing_error");
-    }
-  }, []);
-
-  const goDashboardAfterSuccess = useCallback(() => {
-    if (routedRef.current) return;
-    routedRef.current = true;
-    window.setTimeout(() => router.replace("/"), SUCCESS_ROUTE_MS);
+  const goDashboard = useCallback(() => {
+    router.replace("/");
   }, [router]);
 
-  const triggerOptimisticPaired = useCallback(
-    (_matchedCode: string) => {
-      setOptimisticPaired();
-      setShowSuccess(true);
-      setConnecting(false);
-      goDashboardAfterSuccess();
-
-      void (async () => {
-        try {
-          await refresh();
-          await finalizePairing();
-        } catch {
-          /* DB menyusul di background */
-        }
-      })();
-    },
-    [goDashboardAfterSuccess, refresh, finalizePairing]
-  );
+  useEffect(() => {
+    if (!coupleSpace?.id) return;
+    return subscribeSpaceMemberChanges(coupleSpace.id, () => {
+      void refresh().then(() => {
+        /* refresh updates members — effect below handles redirect */
+      });
+    });
+  }, [coupleSpace?.id, refresh]);
 
   useEffect(() => {
-    return subscribePairingBroadcast((incomingCode) => {
-      if (mode !== "create" || !generatedCode) return;
-      if (incomingCode !== normalizePairingCode(generatedCode)) return;
-      triggerOptimisticPaired(incomingCode);
-    });
-  }, [mode, generatedCode, triggerOptimisticPaired]);
+    if (isPaired && coupleSpace?.onboardingComplete) {
+      goDashboard();
+    }
+  }, [isPaired, coupleSpace?.onboardingComplete, goDashboard]);
 
   const handleCreate = async () => {
     setCreating(true);
@@ -120,41 +88,33 @@ export default function PairingPage() {
     }
   };
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     const normalized = normalizePairingCode(code);
     if (!isValidPairingCode(normalized)) {
       setError("Kode harus 6 karakter");
       return;
     }
 
-    joinAbortRef.current = false;
     lockedCodeRef.current = normalized;
     setConnecting(true);
     setError("");
 
-    broadcastPairingPaired(normalized);
-    triggerOptimisticPaired(normalized);
-
-    void joinCoupleSpaceInBackground(normalized, {
-      isAborted: () => joinAbortRef.current,
-    }).catch((e) => {
-      if (e instanceof Error && e.message === "ABORTED") return;
-      routedRef.current = false;
-      setShowSuccess(false);
+    try {
+      const ok = await joinCoupleSpaceInstant(normalized);
+      if (ok) {
+        goDashboard();
+        return;
+      }
+      setError("Gagal menghubungkan");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Kode tidak valid");
+    } finally {
       setConnecting(false);
-      sessionStorage.setItem(
-        "pairing_error",
-        e instanceof Error ? e.message : "Kode tidak valid"
-      );
-      router.replace("/onboarding/pairing");
-    });
+    }
   };
 
   const handleCancelJoin = () => {
-    joinAbortRef.current = true;
-    routedRef.current = false;
     setConnecting(false);
-    setShowSuccess(false);
     setError("");
   };
 
@@ -167,15 +127,13 @@ export default function PairingPage() {
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col justify-center bg-white px-6">
-      <PairingSuccessOverlay show={showSuccess} />
-
       <h1 className="text-center text-[26px] font-bold text-[#1C1C1E]">Hubungkan Ruang</h1>
       <p className="mt-2 text-center text-[15px] text-[#8E8E93]">
-        Pairing optimistik — broadcast realtime
+        Satu klik — satu proses server, tanpa delay.
       </p>
 
       <AnimatePresence mode="wait">
-        {mode === "choose" && !showSuccess && (
+        {mode === "choose" && (
           <motion.div
             key="choose"
             initial={{ opacity: 0, y: 8 }}
@@ -191,7 +149,7 @@ export default function PairingPage() {
               <Heart className="h-6 w-6 shrink-0" />
               <div>
                 <p className="font-semibold">Create Space</p>
-                <p className="text-[13px] text-[#8E8E93]">Kode 6 digit instan</p>
+                <p className="text-[13px] text-[#8E8E93]">Kode 6 digit</p>
               </div>
             </button>
             <button
@@ -208,7 +166,7 @@ export default function PairingPage() {
           </motion.div>
         )}
 
-        {mode === "create" && !generatedCode && !showSuccess && (
+        {mode === "create" && !generatedCode && (
           <motion.div
             key="create-init"
             initial={{ opacity: 0 }}
@@ -225,7 +183,7 @@ export default function PairingPage() {
           </motion.div>
         )}
 
-        {mode === "create" && generatedCode && !showSuccess && (
+        {mode === "create" && generatedCode && (
           <motion.div
             key="create-code"
             initial={{ opacity: 0, scale: 0.98 }}
@@ -252,7 +210,7 @@ export default function PairingPage() {
               </button>
             </Card>
             <p className="mt-4 text-center text-[14px] text-[#8E8E93]">
-              Menunggu partner ({members.length}/2)
+              Menunggu partner ({members.length}/2) — realtime DB
             </p>
             <Button
               fullWidth
@@ -266,7 +224,7 @@ export default function PairingPage() {
           </motion.div>
         )}
 
-        {mode === "join" && !showSuccess && (
+        {mode === "join" && (
           <motion.div
             key="join"
             initial={{ opacity: 0, y: 8 }}
@@ -288,7 +246,7 @@ export default function PairingPage() {
                 }`}
               />
               {connecting && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/40">
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-white/50">
                   <Loader2 className="h-8 w-8 animate-spin text-[#1C1C1E]" />
                 </div>
               )}
@@ -303,7 +261,7 @@ export default function PairingPage() {
                 <Button
                   fullWidth
                   variant="dark"
-                  onClick={handleJoin}
+                  onClick={() => void handleJoin()}
                   disabled={code.length < 6}
                 >
                   Hubungkan
@@ -317,7 +275,7 @@ export default function PairingPage() {
         )}
       </AnimatePresence>
 
-      {error && !showSuccess && (
+      {error && (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

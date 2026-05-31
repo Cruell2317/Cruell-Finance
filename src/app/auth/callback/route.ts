@@ -49,7 +49,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return applyCookiesTo(
-    NextResponse.redirect(`${origin}/onboarding/pairing`)
-  );
+  const nextPath = searchParams.get("next");
+  const safeNext =
+    nextPath?.startsWith("/") && !nextPath.startsWith("//") ? nextPath : "/dashboard";
+
+  return applyCookiesTo(NextResponse.redirect(`${origin}${safeNext}`));
 }

@@ -3,7 +3,6 @@
 import { useAuth } from "@/context/AuthContext";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { getOnboardingPath } from "@/lib/onboarding-routes";
-import { isOptimisticPaired } from "@/lib/realtime/pairing-broadcast";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -24,7 +23,6 @@ function LoadingScreen({ message = "Memuat..." }: { message?: string }) {
   );
 }
 
-/** Guard ringan untuk halaman onboarding — jangan sign-out agresif. */
 function OnboardingRouteGuard({ children }: { children: ReactNode }) {
   const { user, profile, isLoading } = useAuth();
   const [ready, setReady] = useState(false);
@@ -57,7 +55,6 @@ function OnboardingRouteGuard({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Guard untuk app utama — arahkan ke onboarding jika belum selesai. */
 function MainAppGuard({ children }: { children: ReactNode }) {
   const { profile, user, isLoading: authLoading } = useAuth();
   const { step } = useOnboarding();
@@ -78,7 +75,7 @@ function MainAppGuard({ children }: { children: ReactNode }) {
       router.replace("/login");
       return;
     }
-    if (step !== "complete" && !isOptimisticPaired()) {
+    if (step !== "complete") {
       router.replace(getOnboardingPath(step));
     }
   }, [bootDone, authLoading, isAuthed, step, router]);
@@ -90,9 +87,6 @@ function MainAppGuard({ children }: { children: ReactNode }) {
   if (!isAuthed) return null;
 
   if (step !== "complete" && isMainAppPath(pathname)) {
-    if (isOptimisticPaired()) {
-      return <LoadingScreen message="Menyelesaikan hubungan..." />;
-    }
     return <LoadingScreen message="Menyiapkan akun..." />;
   }
 

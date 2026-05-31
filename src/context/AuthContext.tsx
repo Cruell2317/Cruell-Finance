@@ -18,14 +18,12 @@ interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   configReady: boolean;
-  signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (
     email: string,
     password: string,
-    displayName: string,
-    avatarUrl?: string | null
-  ) => Promise<void>;
+    displayName: string
+  ) => Promise<{ needsEmailVerification: boolean }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updateProfile: (displayName: string, avatarUrl: string | null) => Promise<void>;
@@ -203,23 +201,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [configReady, syncDbProfile]);
 
-  const signInWithGoogle = useCallback(async () => {
-    const supabase = createClient();
-    const redirectTo =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/auth/callback`
-        : undefined;
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo,
-        queryParams: { prompt: "consent" },
-      },
-    });
-    if (error) throw error;
-    if (data?.url) window.location.assign(data.url);
-  }, []);
-
   const signInWithEmail = useCallback(
     async (email: string, password: string) => {
       const supabase = createClient();
@@ -239,21 +220,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signUpWithEmail = useCallback(
-    async (
-      email: string,
-      password: string,
-      displayName: string,
-      avatarUrl?: string | null
-    ) => {
+    async (email: string, password: string, displayName: string) => {
       const supabase = createClient();
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+      const emailRedirectTo = origin
+        ? `${origin}/auth/callback?next=/dashboard`
+        : undefined;
+
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
+          emailRedirectTo,
           data: {
             full_name: displayName.trim(),
             display_name: displayName.trim(),
-            avatar_url: avatarUrl ?? null,
           },
         },
       });
@@ -265,8 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: data.user.id,
           email: data.user.email,
           display_name: displayName.trim(),
-          avatar_url: avatarUrl ?? null,
-          profile_setup_done: true,
+          profile_setup_done: false,
         },
         { onConflict: "id" }
       );
@@ -277,23 +258,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile({
           ...next.profile,
           displayName: displayName.trim(),
-          avatarUrl: avatarUrl ?? null,
-          profileSetupDone: true,
         });
-      } else {
-        const { error: loginErr } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-        if (loginErr) {
-          throw new Error(
-            "Akun dibuat. Matikan konfirmasi email di Supabase atau coba login."
-          );
-        }
-        await refreshProfile();
+        return { needsEmailVerification: false };
       }
+
+      return { needsEmailVerification: true };
     },
-    [refreshProfile]
+    []
   );
 
   const updateProfile = useCallback(
@@ -327,7 +298,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         configReady,
-        signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
         signOut,
