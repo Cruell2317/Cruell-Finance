@@ -28,8 +28,6 @@ import type {
   Transaction,
 } from "@/types";
 
-const BANNER_KEY = "cruell-banner-dismissed";
-
 interface AppContextValue {
   coupleSpace: CoupleSpace | null;
   members: CoupleMember[];
@@ -59,7 +57,10 @@ interface AppContextValue {
     name: string;
     imageUrl: string;
     targetAmount: number;
-  }) => Promise<void>;
+    targetDueDate?: string | null;
+  }) => Promise<string>;
+  bankSyncBalance: number | null;
+  syncOpenBanking: () => Promise<void>;
   deleteTarget: (targetId: string) => Promise<void>;
   updateTarget: (
     targetId: string,
@@ -100,9 +101,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const currentMonth = getCurrentMonthYear();
 
   useEffect(() => {
-    if (typeof window === "undefined" || !profile?.coupleSpaceId) return;
-    const key = `${BANNER_KEY}-${profile.coupleSpaceId}`;
-    setIsBannerDismissed(sessionStorage.getItem(key) === "1");
+    setIsBannerDismissed(false);
   }, [profile?.coupleSpaceId]);
 
   const reloadData = useCallback(async () => {
@@ -223,6 +222,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const poolBalance = coupleSpace?.poolBalance ?? 0;
+  const bankSyncBalance = coupleSpace?.bankSyncBalance ?? null;
+
+  const syncOpenBanking = useCallback(async () => {
+    await fetch("/api/open-banking/sync", { method: "POST" });
+    await reloadData();
+  }, [reloadData]);
 
   const monthlyTransactions = useMemo(
     () =>
@@ -259,11 +264,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [monthlyTransactions, deposits]);
 
   const dismissBanner = useCallback(() => {
-    if (profile?.coupleSpaceId) {
-      sessionStorage.setItem(`${BANNER_KEY}-${profile.coupleSpaceId}`, "1");
-    }
     setIsBannerDismissed(true);
-  }, [profile?.coupleSpaceId]);
+  }, []);
 
   const addPoolDeposit = useCallback(
     async (amount: number, note?: string) => {
@@ -292,18 +294,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const addTarget = useCallback(
-    async (input: { name: string; imageUrl: string; targetAmount: number }) => {
-      if (!profile?.coupleSpaceId) return;
+    async (input: {
+      name: string;
+      imageUrl: string;
+      targetAmount: number;
+      targetDueDate?: string | null;
+    }) => {
+      if (!profile?.coupleSpaceId) throw new Error("Belum pairing");
       const supabase = createClient();
-      const { error } = await supabase.from("targets").insert({
-        couple_space_id: profile.coupleSpaceId,
-        created_by: profile.id,
-        target_name: input.name,
-        target_amount: input.targetAmount,
-        image_url: input.imageUrl,
-      });
+      const { data, error } = await supabase
+        .from("targets")
+        .insert({
+          couple_space_id: profile.coupleSpaceId,
+          created_by: profile.id,
+          target_name: input.name,
+          target_amount: input.targetAmount,
+          image_url: input.imageUrl,
+          target_due_date: input.targetDueDate || null,
+        })
+        .select("id")
+        .single();
       if (error) throw error;
       await reloadData();
+      return data.id as string;
     },
     [profile, reloadData]
   );
@@ -501,6 +514,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isBannerDismissed,
         dismissBanner,
         poolBalance,
+        bankSyncBalance,
+        syncOpenBanking,
         monthlyTransactions,
         monthlyActivity,
         openPayment: setPaymentSelection,

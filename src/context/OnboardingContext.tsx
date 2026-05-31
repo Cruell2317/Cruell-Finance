@@ -24,16 +24,9 @@ interface OnboardingContextValue {
   isLoading: boolean;
   createCoupleSpace: () => Promise<{ code: string }>;
   joinCoupleSpace: (code: string) => Promise<void>;
-  completeProfileSetup: (displayName: string, avatarUrl: string | null) => Promise<void>;
-  setStartDate: (month: number, year: number) => Promise<void>;
-  completeTargetStep: (input?: {
-    name: string;
-    imageUrl: string;
-    targetAmount: number;
-  }) => Promise<void>;
-  skipTargetStep: () => Promise<void>;
   refresh: () => Promise<void>;
   disconnectCoupleSpace: () => Promise<void>;
+  finalizePairing: () => Promise<void>;
 }
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
@@ -83,20 +76,25 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const isPaired = members.length >= 2;
 
   const step: OnboardingStep = useMemo(() => {
-    if (!profile) {
-      return user ? "pairing" : "login";
-    }
+    if (!profile) return user ? "pairing" : "login";
     if (!profile.coupleSpaceId || !isPaired) return "pairing";
-    if (!profile.profileSetupDone) return "profile";
-    if (
-      !coupleSpace?.startMonth ||
-      !coupleSpace?.startYear ||
-      coupleSpace.startMonth === null
-    )
-      return "start-date";
-    if (!coupleSpace.onboardingComplete) return "target";
+    if (!coupleSpace?.onboardingComplete) return "pairing";
     return "complete";
   }, [profile, user, isPaired, coupleSpace]);
+
+  const finalizePairing = useCallback(async () => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("finalize_couple_pairing");
+    if (error) throw error;
+    await refreshProfile();
+    await loadState();
+  }, [refreshProfile, loadState]);
+
+  useEffect(() => {
+    if (!isPaired || !profile?.coupleSpaceId) return;
+    if (coupleSpace?.onboardingComplete) return;
+    void finalizePairing().catch(() => {});
+  }, [isPaired, profile?.coupleSpaceId, coupleSpace?.onboardingComplete, finalizePairing]);
 
   const createCoupleSpace = useCallback(async () => {
     const supabase = createClient();
@@ -119,12 +117,13 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       await refreshProfile();
       await loadState();
+      await finalizePairing();
       const sid = spaceId as string;
       if (sid) {
         await broadcastCoupleEvent(sid, { type: "paired", spaceId: sid });
       }
     },
-    [refreshProfile, loadState]
+    [refreshProfile, loadState, finalizePairing]
   );
 
   const disconnectCoupleSpace = useCallback(async () => {
@@ -139,64 +138,6 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     await loadState();
   }, [profile?.coupleSpaceId, refreshProfile, loadState]);
 
-  const completeProfileSetup = useCallback(
-    async (displayName: string, avatarUrl: string | null) => {
-      if (!profile) return;
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("users")
-        .update({
-          display_name: displayName.trim(),
-          avatar_url: avatarUrl,
-          profile_setup_done: true,
-        })
-        .eq("id", profile.id);
-      if (error) throw error;
-      await refreshProfile();
-      await loadState();
-    },
-    [profile, refreshProfile, loadState]
-  );
-
-  const setStartDate = useCallback(
-    async (month: number, year: number) => {
-      const supabase = createClient();
-      const { error } = await supabase.rpc("activate_time_machine", {
-        p_start_month: month,
-        p_start_year: year,
-      });
-      if (error) throw error;
-      await loadState();
-    },
-    [loadState]
-  );
-
-  const finishOnboarding = useCallback(
-    async (target?: { name: string; imageUrl: string; targetAmount: number }) => {
-      if (!profile?.coupleSpaceId) return;
-      const supabase = createClient();
-
-      if (target) {
-        const { error: tErr } = await supabase.from("targets").insert({
-          couple_space_id: profile.coupleSpaceId,
-          created_by: profile.id,
-          target_name: target.name,
-          target_amount: target.targetAmount,
-          image_url: target.imageUrl,
-        });
-        if (tErr) throw tErr;
-      }
-
-      const { error } = await supabase
-        .from("couple_spaces")
-        .update({ onboarding_complete: true })
-        .eq("id", profile.coupleSpaceId);
-      if (error) throw error;
-      await loadState();
-    },
-    [profile, loadState]
-  );
-
   return (
     <OnboardingContext.Provider
       value={{
@@ -207,12 +148,9 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         isLoading,
         createCoupleSpace,
         joinCoupleSpace,
-        completeProfileSetup,
-        setStartDate,
-        completeTargetStep: finishOnboarding,
-        skipTargetStep: () => finishOnboarding(),
         refresh: loadState,
         disconnectCoupleSpace,
+        finalizePairing,
       }}
     >
       {children}

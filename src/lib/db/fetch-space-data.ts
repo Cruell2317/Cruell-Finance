@@ -52,6 +52,11 @@ function mapSpace(row: Record<string, unknown>): CoupleSpace {
     startYear: row.start_year as number | null,
     poolBalance: Number(row.pool_balance ?? 0),
     onboardingComplete: row.onboarding_complete as boolean,
+    bankProvider: (row.bank_provider as string) ?? null,
+    bankAccountRef: (row.bank_account_ref as string) ?? null,
+    bankSyncBalance:
+      row.bank_sync_balance != null ? Number(row.bank_sync_balance) : null,
+    bankLastSyncedAt: (row.bank_last_synced_at as string) ?? null,
     createdAt: row.created_at as string,
   };
 }
@@ -150,6 +155,7 @@ export async function fetchCoupleSpaceData(coupleSpaceId: string) {
     collectedAmount: Number(t.current_amount),
     createdBy: t.created_by,
     createdByName: memberMap.get(t.created_by)?.displayName ?? "User",
+    targetDueDate: (t.target_due_date as string) ?? null,
     createdAt: t.created_at,
   }));
 

@@ -6,12 +6,6 @@ export function getOnboardingPath(step: OnboardingStep): string {
       return "/login";
     case "pairing":
       return "/onboarding/pairing";
-    case "profile":
-      return "/onboarding/profile";
-    case "start-date":
-      return "/onboarding/start-date";
-    case "target":
-      return "/onboarding/target";
     case "complete":
       return "/";
     default:

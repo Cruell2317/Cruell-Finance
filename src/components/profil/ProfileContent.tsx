@@ -87,7 +87,7 @@ export function ProfileContent() {
 
   const handleSignOut = async () => {
     await signOut();
-    router.replace("/splash");
+    router.replace("/login");
   };
 
   return (

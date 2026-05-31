@@ -18,12 +18,12 @@ interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   configReady: boolean;
-  signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (
     email: string,
     password: string,
-    displayName: string
+    displayName: string,
+    avatarUrl?: string | null
   ) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -202,10 +202,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [configReady, syncDbProfile]);
 
-  const signInWithGoogle = useCallback(async () => {
-    window.location.assign("/auth/google");
-  }, []);
-
   const signInWithEmail = useCallback(
     async (email: string, password: string) => {
       const supabase = createClient();
@@ -225,7 +221,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signUpWithEmail = useCallback(
-    async (email: string, password: string, displayName: string) => {
+    async (
+      email: string,
+      password: string,
+      displayName: string,
+      avatarUrl?: string | null
+    ) => {
       const supabase = createClient();
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
@@ -234,22 +235,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           data: {
             full_name: displayName.trim(),
             display_name: displayName.trim(),
+            avatar_url: avatarUrl ?? null,
           },
         },
       });
       if (error) throw error;
       if (!data.user) throw new Error("Registrasi gagal");
 
-      await ensureUserRow(data.user, displayName.trim());
-      await supabase
-        .from("users")
-        .update({ display_name: displayName.trim() })
-        .eq("id", data.user.id);
+      await supabase.from("users").upsert(
+        {
+          id: data.user.id,
+          email: data.user.email,
+          display_name: displayName.trim(),
+          avatar_url: avatarUrl ?? null,
+          profile_setup_done: true,
+        },
+        { onConflict: "id" }
+      );
 
       if (data.session) {
         setUser(data.user);
         const next = applyUser(data.user);
-        setProfile({ ...next.profile, displayName: displayName.trim() });
+        setProfile({
+          ...next.profile,
+          displayName: displayName.trim(),
+          avatarUrl: avatarUrl ?? null,
+          profileSetupDone: true,
+        });
       } else {
         const { error: loginErr } = await supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -257,7 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         if (loginErr) {
           throw new Error(
-            "Akun dibuat. Aktifkan email di Supabase atau coba login."
+            "Akun dibuat. Matikan konfirmasi email di Supabase atau coba login."
           );
         }
         await refreshProfile();
@@ -297,7 +309,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         configReady,
-        signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
         signOut,

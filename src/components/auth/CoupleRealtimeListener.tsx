@@ -6,14 +6,13 @@ import {
   subscribeCoupleChannel,
   type CoupleBroadcastEvent,
 } from "@/lib/realtime/couple-channels";
-import { getOnboardingPath } from "@/lib/onboarding-routes";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 /** Mendengarkan broadcast pairing / unpair di seluruh app. */
 export function CoupleRealtimeListener() {
   const { profile, refreshProfile } = useAuth();
-  const { refresh, step } = useOnboarding();
+  const { refresh } = useOnboarding();
   const router = useRouter();
   const spaceId = profile?.coupleSpaceId;
 
@@ -24,9 +23,7 @@ export function CoupleRealtimeListener() {
       if (event.type === "paired") {
         await refreshProfile();
         await refresh();
-        if (step === "pairing") {
-          router.replace(getOnboardingPath("profile"));
-        }
+        router.replace("/");
         return;
       }
 
@@ -40,7 +37,7 @@ export function CoupleRealtimeListener() {
     return subscribeCoupleChannel(spaceId, (e) => {
       void handle(e);
     });
-  }, [spaceId, refresh, refreshProfile, router, step]);
+  }, [spaceId, refresh, refreshProfile, router]);
 
   return null;
 }

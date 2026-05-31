@@ -1,39 +1,66 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Flame, PiggyBank } from "lucide-react";
+import { RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { formatRupiah } from "@/lib/utils";
 
 export function BalanceCard() {
-  const { poolBalance, currentMonth, members } = useApp();
+  const { poolBalance, bankSyncBalance, syncOpenBanking, currentMonth } = useApp();
   const { profile } = useAuth();
-  const myMember = members.find((m) => m.userId === profile?.id);
-  const streak = myMember?.savingStreak ?? profile?.savingStreak ?? 0;
+  const [syncing, setSyncing] = useState(false);
+
+  useEffect(() => {
+    void syncOpenBanking();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync sekali saat mount ruang
+  }, []);
+
+  const displayBalance = bankSyncBalance ?? poolBalance;
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      await syncOpenBanking();
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
       <Card className="border-[#E5E5EA] bg-gradient-to-br from-[#F7F7F9] to-white p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-[15px] text-[#8E8E93]">Total Tabungan Bersama</p>
-            <p className="mt-1 text-[34px] font-bold">{formatRupiah(poolBalance)}</p>
-            <p className="mt-1 text-[13px] text-[#8E8E93]">{currentMonth}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-[#8E8E93]">
+              Saldo Rekening Bersama · Brick/SNAP (simulasi)
+            </p>
+            <p className="mt-1 text-[32px] font-bold leading-tight">
+              {formatRupiah(displayBalance)}
+            </p>
+            <p className="mt-1 text-[13px] text-[#8E8E93]">
+              Pool internal: {formatRupiah(poolBalance)} · {currentMonth}
+            </p>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="rounded-2xl border border-[#E5E5EA] bg-white p-3">
-              <PiggyBank className="h-7 w-7 text-[#8E8E93]" />
-            </div>
-            {streak > 0 && (
-              <div className="flex items-center gap-1 rounded-full bg-[#F7F7F9] px-2 py-1 text-[12px] font-semibold text-[#1C1C1E]">
-                <Flame className="h-4 w-4 text-[#FF3B30]" />
-                {streak} minggu streak
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => void handleSync()}
+            disabled={syncing}
+            className="shrink-0 rounded-full border border-[#E5E5EA] bg-white p-2.5"
+            aria-label="Sinkron bank"
+          >
+            <RefreshCw
+              className={`h-5 w-5 text-[#1C1C1E] ${syncing ? "animate-spin" : ""}`}
+            />
+          </button>
         </div>
+        {profile?.role === "CREATOR" && (
+          <p className="mt-3 text-[12px] text-[#8E8E93]">
+            Administrator: atur QR/VA di Profil → Pembayaran
+          </p>
+        )}
       </Card>
     </motion.div>
   );

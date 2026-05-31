@@ -2,13 +2,7 @@ export type PeriodStatus = "UNPAID" | "PAID" | "LATE";
 
 export type UserRole = "CREATOR" | "JOINER";
 
-export type OnboardingStep =
-  | "login"
-  | "pairing"
-  | "profile"
-  | "start-date"
-  | "target"
-  | "complete";
+export type OnboardingStep = "login" | "pairing" | "complete";
 
 export interface Profile {
   id: string;
@@ -32,6 +26,10 @@ export interface CoupleSpace {
   startYear: number | null;
   poolBalance: number;
   onboardingComplete: boolean;
+  bankProvider?: string | null;
+  bankAccountRef?: string | null;
+  bankSyncBalance?: number | null;
+  bankLastSyncedAt?: string | null;
   createdAt: string;
 }
 
@@ -105,6 +103,7 @@ export interface SavingsTarget {
   collectedAmount: number;
   createdBy: string;
   createdByName: string;
+  targetDueDate: string | null;
   createdAt: string;
 }
 

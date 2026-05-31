@@ -7,12 +7,12 @@ import { useAuth } from "@/context/AuthContext";
 import { useOnboarding } from "@/context/OnboardingContext";
 import { getOnboardingPath } from "@/lib/onboarding-routes";
 
-const SPLASH_MS = 2000;
+const SPLASH_MS = 1500;
 
 export default function SplashPage() {
   const router = useRouter();
   const { profile, user, isLoading: authLoading } = useAuth();
-  const { step, isLoading: onboardingLoading, isPaired } = useOnboarding();
+  const { step, isLoading: onboardingLoading } = useOnboarding();
   const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
@@ -29,32 +29,18 @@ export default function SplashPage() {
       return;
     }
 
-    if (step === "complete" && isPaired && profile?.coupleSpaceId) {
-      router.replace("/");
-      return;
-    }
-
     router.replace(getOnboardingPath(step));
-  }, [
-    splashDone,
-    authLoading,
-    onboardingLoading,
-    profile,
-    user,
-    step,
-    isPaired,
-    router,
-  ]);
+  }, [splashDone, authLoading, onboardingLoading, profile, user, step, router]);
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center bg-white">
+    <div className="mx-auto flex min-h-screen max-w-md items-center justify-center bg-white">
       <motion.h1
         className="text-center text-[34px] font-semibold tracking-tight text-[#1C1C1E]"
         initial={{ opacity: 0, scale: 0.92 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
       >
-        Cruell Finance
+        Cruell Financial
       </motion.h1>
     </div>
   );

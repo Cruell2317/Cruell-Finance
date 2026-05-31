@@ -8,8 +8,9 @@ export function GreetingHeader() {
 
   return (
     <AppHeader
-      subtitle="Cruell Finance"
+      subtitle="Cruell Financial"
       title={`Haloow ${profile?.displayName ?? "..."}`}
+      showProfile
     />
   );
 }
