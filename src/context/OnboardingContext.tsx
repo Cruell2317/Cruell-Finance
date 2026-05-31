@@ -23,10 +23,18 @@ interface OnboardingContextValue {
   isPaired: boolean;
   isLoading: boolean;
   createCoupleSpace: () => Promise<{ code: string }>;
-  joinCoupleSpace: (code: string) => Promise<void>;
+  joinCoupleSpace: (
+    code: string,
+    opts?: { isAborted?: () => boolean }
+  ) => Promise<void>;
+  cancelCoupleSpace: () => Promise<void>;
   refresh: () => Promise<void>;
   disconnectCoupleSpace: () => Promise<void>;
   finalizePairing: () => Promise<void>;
+}
+
+function throwIfAborted(isAborted?: () => boolean) {
+  if (isAborted?.()) throw new Error("ABORTED");
 }
 
 const OnboardingContext = createContext<OnboardingContextValue | null>(null);
@@ -107,17 +115,25 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   }, [refreshProfile, loadState]);
 
   const joinCoupleSpace = useCallback(
-    async (rawCode: string) => {
+    async (rawCode: string, opts?: { isAborted?: () => boolean }) => {
       const code = normalizePairingCode(rawCode);
       if (!isValidPairingCode(code)) throw new Error("Kode harus 6 karakter");
+      throwIfAborted(opts?.isAborted);
+
       const supabase = createClient();
       const { data: spaceId, error } = await supabase.rpc("join_couple_space", {
         p_code: code,
       });
       if (error) throw error;
+      throwIfAborted(opts?.isAborted);
+
       await refreshProfile();
+      throwIfAborted(opts?.isAborted);
       await loadState();
+      throwIfAborted(opts?.isAborted);
       await finalizePairing();
+      throwIfAborted(opts?.isAborted);
+
       const sid = spaceId as string;
       if (sid) {
         await broadcastCoupleEvent(sid, { type: "paired", spaceId: sid });
@@ -125,6 +141,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     },
     [refreshProfile, loadState, finalizePairing]
   );
+
+  const cancelCoupleSpace = useCallback(async () => {
+    const supabase = createClient();
+    const { error } = await supabase.rpc("cancel_couple_space");
+    if (error) throw error;
+    await refreshProfile();
+    await loadState();
+  }, [refreshProfile, loadState]);
 
   const disconnectCoupleSpace = useCallback(async () => {
     const spaceId = profile?.coupleSpaceId;
@@ -148,6 +172,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         isLoading,
         createCoupleSpace,
         joinCoupleSpace,
+        cancelCoupleSpace,
         refresh: loadState,
         disconnectCoupleSpace,
         finalizePairing,

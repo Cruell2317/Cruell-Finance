@@ -18,6 +18,7 @@ interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   configReady: boolean;
+  signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (
     email: string,
@@ -202,6 +203,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [configReady, syncDbProfile]);
 
+  const signInWithGoogle = useCallback(async () => {
+    window.location.assign("/auth/google");
+  }, []);
+
   const signInWithEmail = useCallback(
     async (email: string, password: string) => {
       const supabase = createClient();
@@ -309,6 +314,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         configReady,
+        signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
         signOut,
